@@ -8,10 +8,15 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.withStyledAttributes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import ru.netology.statsview.R
 import ru.netology.statsview.utils.AndroidUtils
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
+import androidx.lifecycle.LifecycleCoroutineScope
+import androidx.core.graphics.withRotation
 
 class StatsView @JvmOverloads constructor(
     context: Context,
@@ -26,6 +31,10 @@ class StatsView @JvmOverloads constructor(
     private var lineWidth = AndroidUtils.dp(context, 5F).toFloat()
     private var fontSize = AndroidUtils.dp(context, 40F).toFloat()
     private var colors = emptyList<Int>()
+
+    private var progress = 0F // От 0 до 360
+    private var rotationAngle = 0F // Угол вращения
+
 
     init {
         context.withStyledAttributes(attrs, R.styleable.StatsView) {
@@ -55,6 +64,23 @@ class StatsView @JvmOverloads constructor(
             invalidate()
         }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+
+        val animator = object : Runnable {
+            override fun run() {
+                // Логика из блока выше
+                progress += 7.5f; if (progress >= 360f) progress -= 360f
+                rotationAngle += 3f; if (rotationAngle >= 360f) rotationAngle -= 360f
+
+                invalidate()
+                postDelayed(this, 16L) // Запускаем себя снова через 16 мс
+            }
+        }
+        // Начинаем анимацию при создании view
+        post(animator)
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         radius = min(w, h) / 2F - lineWidth / 2
         center = PointF(w / 2F, h / 2F)
@@ -72,24 +98,44 @@ class StatsView @JvmOverloads constructor(
 
         if (total == 0f || fractionsSum > 1 || colors.isEmpty()) return // Защита от пустых данных или цветов
 
-        paint.color = 0xFFCCCCCC.toInt()
-        canvas.drawCircle(center.x, center.y, radius, paint)
-        var startFrom = -90f // Начинаем сверху
+        val GAP_DEGREES = 0.5f // Зазор между сегментами
+        val totalAngle = 360f
+        var currentProgress = 0f
 
-        for ((index, fraction) in fractions.withIndex()) {
-            val angle = 360f * fraction
+        canvas.withRotation(rotationAngle, center.x, center.y) { // Запоминаем исходное положение
+            var startFrom = -90f // Начинаем сверху
 
-            // Устанавливаем цвет КАЖДОЙ итерации цикла
-            paint.color = colors.getOrNull(index % colors.size) ?: randomColor()
-            canvas.drawArc(oval,startFrom,angle,false,paint)
-            startFrom += angle
-        }
-        // ЗНАЮ КАРЯВО, КОСТЫЛЬНО НО РАБОТАЕТ
-        if (fractionsSum > 0.975F) {
-            //Если Сумма элементов гистограммы больше 97,5%
-            //еще раз выведем четвертинку первого сегмента
-            paint.color = colors[0]
-            canvas.drawArc(oval, startFrom, 90 * fractions[0], false, paint)
+            // Параллельный вывод дуг
+            /*
+            for ((index, fraction) in fractions.withIndex()) {
+                val angle = totalAngle * fraction
+                val sweepAngle = progress / 360f * angle
+
+                // Устанавливаем цвет КАЖДОЙ итерации цикла
+                paint.color = colors.getOrNull(index % colors.size) ?: randomColor()
+                drawArc(oval, startFrom, sweepAngle, false, paint)
+
+                startFrom += angle + if (index < fractions.lastIndex) GAP_DEGREES else 0f
+                currentProgress += angle
+            }
+
+             */
+            // Последовательный вывод дуг
+            for ((index, fraction) in fractions.withIndex()) {
+                val angle = totalAngle * fraction
+                 val sweepAngle = when {
+                    progress <= currentProgress -> 0f // Сектор ещё не начался
+                    progress >= currentProgress + angle -> angle// Сектор полностью виден
+                    else -> progress - currentProgress // Частично видим
+                }
+                //назначаем цвет КАЖДОЙ итерации цикла
+                paint.color = colors.getOrNull(index % colors.size) ?: randomColor()
+                canvas.drawArc(oval, startFrom, sweepAngle, false, paint)
+
+                startFrom += angle + if (index < fractions.lastIndex) GAP_DEGREES else 0f
+                currentProgress += angle
+            }
+
         }
         canvas.drawText(
             "%.2f%%".format(fractionsSum * 100),
