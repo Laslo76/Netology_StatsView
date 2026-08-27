@@ -66,50 +66,33 @@ class StatsView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         if (data.isEmpty()) return
-        val fractionsSum = data.sum() - data[0]
-        // Проверим что сумма выводимых частей не превышает сумму для 100%
-        if (fractionsSum > data[0]) {
-            return
-        }
-        val total = data.get(0)
-        if (total == 0f || colors.isEmpty()) return // Защита от пустых данных или цветов
+        val total = data[0]
+        val fractions = data.drop(1).map { it / total }
+        val fractionsSum = fractions.sum()
 
-        // Нормализуем данные внутри метода
-        val fractions = data.map { it / total }
-
-        var startFrom = -90f // Начинаем сверху
+        if (total == 0f || fractionsSum > 1 || colors.isEmpty()) return // Защита от пустых данных или цветов
 
         paint.color = 0xFFCCCCCC.toInt()
         canvas.drawCircle(center.x, center.y, radius, paint)
-
+        var startFrom = -90f // Начинаем сверху
 
         for ((index, fraction) in fractions.withIndex()) {
-            if (index > 0) {
-                val angle = 360f * fraction
+            val angle = 360f * fraction
 
-                // Устанавливаем цвет КАЖДОЙ итерации цикла
-                paint.color = colors.getOrNull(index % colors.size) ?: randomColor()
-
-                canvas.drawArc(
-                    oval,
-                    startFrom,
-                    angle,
-                    false,
-                    paint
-                )
-
-                startFrom += angle
-            }
+            // Устанавливаем цвет КАЖДОЙ итерации цикла
+            paint.color = colors.getOrNull(index % colors.size) ?: randomColor()
+            canvas.drawArc(oval,startFrom,angle,false,paint)
+            startFrom += angle
         }
         // ЗНАЮ КАРЯВО, КОСТЫЛЬНО НО РАБОТАЕТ
-        if (fractionsSum > data[0] * 0.975F) {
-            //Если Сумма элементов гистограмы болльше 97,5%
-            //перевыведем еще раз половинку первого сегмента
-            paint.color = colors.getOrNull(1 % colors.size) ?: randomColor()
-            canvas.drawArc(oval, startFrom, 90 * fractions[1], false, paint)
+        if (fractionsSum > 0.975F) {
+            //Если Сумма элементов гистограммы больше 97,5%
+            //еще раз выведем четвертинку первого сегмента
+            paint.color = colors[0]
+            canvas.drawArc(oval, startFrom, 90 * fractions[0], false, paint)
         }
         canvas.drawText(
-            "%.2f%%".format((fractions.sum() - 1) * 100),
+            "%.2f%%".format(fractionsSum * 100),
             center.x,
             center.y + textPaint.textSize / 4,
             textPaint,

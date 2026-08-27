@@ -27,7 +27,7 @@ class AppActivity : AppCompatActivity() {
             500F,
             500F,
             500F,
-            90F
+
         )
     }
 }
